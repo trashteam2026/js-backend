@@ -5,6 +5,7 @@ import express from 'express';
 
 import authRoutes from './routes/authRoutes.js';
 import categoriesRoutes from './routes/categoriesRoutes.js';
+import itemRoutes from './routes/itemRoutes.js';
 
 dotenv.config();
 
@@ -41,6 +42,7 @@ app.use((req, res, next) => {
 
 app.use('/auth', authRoutes);
 app.use('/categories', categoriesRoutes);
+app.use('/items', itemRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
