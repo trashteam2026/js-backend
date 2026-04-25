@@ -9,9 +9,9 @@ const categoriesController = {
   async getAllCategories(_req, res) {
     try {
       const { rows } = await pgPool.query(
-        `SELECT id, name, created_at AS "createdAt"
+        `SELECT id, name, parent_group, display_order, created_at AS "createdAt"
          FROM categories
-         ORDER BY name ASC`
+         ORDER BY display_order ASC, name ASC`
       );
 
       res.status(200).json(rows);
@@ -50,16 +50,20 @@ const categoriesController = {
   async createCategory(req, res) {
     try {
       const name = req.body.name?.trim();
+      const { parent_group = 'food', display_order = 0 } = req.body;
 
       if (!name) {
         return res.status(400).json({ error: 'Category name is required' });
       }
+      if (!['food', 'non_food'].includes(parent_group)) {
+        return res.status(400).json({ error: 'parent_group must be food or non_food' });
+      }
 
       const { rows } = await pgPool.query(
-        `INSERT INTO categories (name)
-         VALUES ($1)
-         RETURNING id, name, created_at AS "createdAt"`,
-        [name]
+        `INSERT INTO categories (name, parent_group, display_order)
+         VALUES ($1, $2, $3)
+         RETURNING id, name, parent_group, display_order, created_at AS "createdAt"`,
+        [name, parent_group, display_order]
       );
 
       res.status(201).json(rows[0]);
