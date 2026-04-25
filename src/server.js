@@ -6,6 +6,8 @@ import express from 'express';
 import authRoutes from './routes/authRoutes.js';
 import categoriesRoutes from './routes/categoriesRoutes.js';
 import itemRoutes from './routes/itemRoutes.js';
+import barcodeRoutes from './routes/barcodeRoutes.js';
+import inventoryRoutes from './routes/inventoryRoutes.js';
 
 dotenv.config();
 
@@ -49,6 +51,8 @@ app.use((req, res, next) => {
 app.use('/auth', authRoutes);
 app.use('/categories', categoriesRoutes);
 app.use('/items', itemRoutes);
+app.use('/api/barcode', barcodeRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
