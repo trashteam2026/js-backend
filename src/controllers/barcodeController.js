@@ -64,6 +64,24 @@ const lookupUpcItemDb = async (barcode) => {
   };
 };
 
+const lookupProvider = async (providerName, lookupFn, barcode) => {
+  try {
+    return await lookupFn(barcode);
+  } catch (error) {
+    if (error.response?.status === 429) {
+      console.warn(`${providerName} barcode lookup rate limit hit`);
+      return null;
+    }
+
+    if (error.response?.status === 404) {
+      return null;
+    }
+
+    console.warn(`${providerName} barcode lookup failed:`, error.message);
+    return null;
+  }
+};
+
 export const lookupBarcode = async (req, res) => {
   const { barcode } = req.body;
 
@@ -76,6 +94,8 @@ export const lookupBarcode = async (req, res) => {
     const existingItem = await getItemByBarcode(barcode);
     if (existingItem) {
       return res.json({
+        categoryId: existingItem.category_id,
+        categoryName: existingItem.category_name,
         productName: existingItem.name,
         source: 'database',
       });
@@ -91,18 +111,24 @@ export const lookupBarcode = async (req, res) => {
       });
     }
 
-    const openFoodFactsResult = await lookupOpenFoodFacts(barcode);
+    const openFoodFactsResult = await lookupProvider(
+      'Open Food Facts',
+      lookupOpenFoodFacts,
+      barcode
+    );
     if (openFoodFactsResult) {
       return res.json(openFoodFactsResult);
     }
 
-    // Optional paid fallback for products that Open Food Facts does not know
-    // about yet. Leaving this behind an env var keeps the default setup free.
-    if (UPCITEMDB_API_KEY) {
-      const upcItemDbResult = await lookupUpcItemDb(barcode);
-      if (upcItemDbResult) {
-        return res.json(upcItemDbResult);
-      }
+    // Free fallback for products that Open Food Facts does not know about yet.
+    // UPCItemDB allows no-key Explorer usage, and accepts user_key when present.
+    const upcItemDbResult = await lookupProvider(
+      'UPCItemDB',
+      lookupUpcItemDb,
+      barcode
+    );
+    if (upcItemDbResult) {
+      return res.json(upcItemDbResult);
     }
 
     return res.status(404).json({ error: 'Product not found' });

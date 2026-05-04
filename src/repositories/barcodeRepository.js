@@ -8,7 +8,15 @@ export const getBarcodeMapping = async (barcode) => {
 
 export const getItemByBarcode = async (barcode) => {
   const query = `
-    SELECT id, name FROM items WHERE barcode = $1 LIMIT 1;
+    SELECT
+      i.id,
+      i.name,
+      c.id AS category_id,
+      c.name AS category_name
+    FROM items i
+    LEFT JOIN categories c ON c.id = i.category_id
+    WHERE i.barcode = $1
+    LIMIT 1;
   `;
   const result = await pgPool.query(query, [barcode]);
   return result.rows[0] || null;

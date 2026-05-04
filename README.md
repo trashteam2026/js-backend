@@ -104,7 +104,7 @@ Required `.env` variables (see [.env.example](.env.example)):
 - `FRONTEND_URL_DEV` - Development frontend URL for CORS
 - `NODE_ENV` - Environment (development/production)
 - `OPEN_FOOD_FACTS_USER_AGENT` - Optional custom user-agent string for barcode lookups
-- `UPCITEMDB_API_KEY` - Optional paid fallback for barcode lookups when Open Food Facts has no match
+- `UPCITEMDB_API_KEY` - Optional UPCItemDB key for higher lookup limits; the no-key free tier is used when omitted
 
 `rds-config.ini` is only needed when migrating to AWS RDS. See
 [SETUP_GUIDE.md](SETUP_GUIDE.md).
