@@ -2,6 +2,7 @@ import axios from 'axios';
 
 import {
   getBarcodeMapping,
+  getItemByBarcode,
   setBarcodeMapping,
 } from '../repositories/barcodeRepository.js';
 
@@ -71,6 +72,15 @@ export const lookupBarcode = async (req, res) => {
   }
 
   try {
+    // Check our own database first - existing items in inventory take priority
+    const existingItem = await getItemByBarcode(barcode);
+    if (existingItem) {
+      return res.json({
+        productName: existingItem.name,
+        source: 'database',
+      });
+    }
+
     // The admin nickname wins over any third-party catalog result. That keeps
     // the pantry's preferred naming consistent across future scans.
     const customMapping = await getBarcodeMapping(barcode);
