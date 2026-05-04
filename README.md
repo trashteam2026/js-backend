@@ -17,13 +17,15 @@ Check out DISC:
 
 ## Stack
 
-Firebase Authentication + Supabase (PostgreSQL) backend template. Can be migrated to AWS RDS (MySQL) — see [SETUP_GUIDE.md](SETUP_GUIDE.md).
+Firebase Authentication + Supabase (PostgreSQL) backend template. Can be
+migrated to AWS RDS (MySQL) — see [SETUP_GUIDE.md](SETUP_GUIDE.md).
 
 - **Runtime**: Node.js with ES Modules
 - **Framework**: Express.js
 - **Authentication**: Firebase Auth (Email/Password + Google OAuth)
 - **Database**: Supabase (PostgreSQL) — switchable to AWS RDS (MySQL)
-- **Database Client**: pg / mysql2 (connection pool, raw SQL with parameterized queries)
+- **Database Client**: pg / mysql2 (connection pool, raw SQL with parameterized
+  queries)
 - **Language**: JavaScript (ES Modules)
 
 ## Quick Start
@@ -53,6 +55,12 @@ See [SETUP_GUIDE.md](SETUP_GUIDE.md) for full setup instructions.
 - `GET /auth/users` - Get all users (protected)
 - `POST /auth/logout` - Logout
 - `POST /auth/token` - Sync Firebase OAuth user to database
+- `POST /api/barcode/lookup` - Resolve a scanned barcode to a product name
+- `POST /api/barcode/set-custom` - Save an admin-defined nickname for a barcode
+- `GET /api/inventory/categories` - Get inventory grouped by category
+- `POST /api/inventory/categories` - Create a new inventory category
+- `GET /api/inventory/items/:itemId` - Get item detail and expiration batches
+- `POST /api/inventory/check-in` - Add scanned inventory into stock
 
 ## Scripts
 
@@ -69,8 +77,8 @@ install the recommended extensions from `.vscode/extensions.json`. Click
 **Install** on the notification, or install them manually:
 
 1. [Prettier ESLint](https://marketplace.visualstudio.com/items?itemName=rvest.vs-code-prettier-eslint)
-   (`rvest.vs-code-prettier-eslint`) — formats your code using both Prettier
-   and ESLint rules on every save
+   (`rvest.vs-code-prettier-eslint`) — formats your code using both Prettier and
+   ESLint rules on every save
 2. [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
    (`dbaeumer.vscode-eslint`) — shows lint errors and warnings inline as you
    type
@@ -95,8 +103,11 @@ Required `.env` variables (see [.env.example](.env.example)):
 - `FRONTEND_URL` - Production frontend URL for CORS
 - `FRONTEND_URL_DEV` - Development frontend URL for CORS
 - `NODE_ENV` - Environment (development/production)
+- `OPEN_FOOD_FACTS_USER_AGENT` - Optional custom user-agent string for barcode lookups
+- `UPCITEMDB_API_KEY` - Optional UPCItemDB key for higher lookup limits; the no-key free tier is used when omitted
 
-`rds-config.ini` is only needed when migrating to AWS RDS. See [SETUP_GUIDE.md](SETUP_GUIDE.md).
+`rds-config.ini` is only needed when migrating to AWS RDS. See
+[SETUP_GUIDE.md](SETUP_GUIDE.md).
 
 ## Project Structure
 

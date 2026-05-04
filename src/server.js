@@ -7,6 +7,8 @@ import activityRoutes from './routes/activityRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import categoriesRoutes from './routes/categoriesRoutes.js';
 import itemRoutes from './routes/itemRoutes.js';
+import barcodeRoutes from './routes/barcodeRoutes.js';
+import inventoryRoutes from './routes/inventoryRoutes.js';
 
 dotenv.config();
 
