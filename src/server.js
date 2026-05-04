@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 
+import activityRoutes from './routes/activityRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import categoriesRoutes from './routes/categoriesRoutes.js';
 import itemRoutes from './routes/itemRoutes.js';
@@ -49,6 +50,7 @@ app.use((req, res, next) => {
 app.use('/auth', authRoutes);
 app.use('/categories', categoriesRoutes);
 app.use('/items', itemRoutes);
+app.use('/activity', activityRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });

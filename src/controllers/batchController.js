@@ -5,6 +5,14 @@ const parseId = (idParam) => {
   return Number.isInteger(id) && id > 0 ? id : null;
 };
 
+async function logActivity(itemId, itemName, action, quantity) {
+  if (quantity <= 0) return;
+  await pgPool.query(
+    `INSERT INTO activity_log (item_id, item_name, action, quantity) VALUES ($1, $2, $3, $4)`,
+    [itemId, itemName, action, quantity]
+  );
+}
+
 const batchController = {
   async createBatch(req, res) {
     try {
@@ -19,9 +27,8 @@ const batchController = {
         return res.status(400).json({ error: 'Quantity must be a non-negative number' });
       }
 
-      // Verify item exists
       const { rows: itemRows } = await pgPool.query(
-        `SELECT id FROM items WHERE id = $1`,
+        `SELECT id, name FROM items WHERE id = $1`,
         [itemId]
       );
       if (itemRows.length === 0) {
@@ -33,6 +40,8 @@ const batchController = {
          VALUES ($1, $2, $3) RETURNING *`,
         [itemId, expiration_date || null, quantity]
       );
+
+      await logActivity(itemId, itemRows[0].name, 'added', quantity);
 
       res.status(201).json(rows[0]);
     } catch (error) {
@@ -54,6 +63,18 @@ const batchController = {
 
       if (quantity !== undefined && (typeof quantity !== 'number' || quantity < 0)) {
         return res.status(400).json({ error: 'Quantity must be a non-negative number' });
+      }
+
+      // Fetch current batch + item name before updating
+      const { rows: currentRows } = await pgPool.query(
+        `SELECT b.quantity, i.name AS item_name
+         FROM item_batches b
+         JOIN items i ON i.id = b.item_id
+         WHERE b.id = $1 AND b.item_id = $2`,
+        [batchId, itemId]
+      );
+      if (currentRows.length === 0) {
+        return res.status(404).json({ error: 'Batch not found' });
       }
 
       const updates = [];
@@ -82,8 +103,13 @@ const batchController = {
         values
       );
 
-      if (rows.length === 0) {
-        return res.status(404).json({ error: 'Batch not found' });
+      if (quantity !== undefined) {
+        const delta = quantity - currentRows[0].quantity;
+        if (delta > 0) {
+          await logActivity(itemId, currentRows[0].item_name, 'added', delta);
+        } else if (delta < 0) {
+          await logActivity(itemId, currentRows[0].item_name, 'removed', -delta);
+        }
       }
 
       res.status(200).json(rows[0]);
@@ -102,14 +128,24 @@ const batchController = {
         return res.status(400).json({ error: 'Invalid id' });
       }
 
-      const { rows } = await pgPool.query(
-        `DELETE FROM item_batches WHERE id=$1 AND item_id=$2 RETURNING id`,
+      // Fetch batch quantity + item name before deleting
+      const { rows: currentRows } = await pgPool.query(
+        `SELECT b.quantity, i.name AS item_name
+         FROM item_batches b
+         JOIN items i ON i.id = b.item_id
+         WHERE b.id = $1 AND b.item_id = $2`,
+        [batchId, itemId]
+      );
+      if (currentRows.length === 0) {
+        return res.status(404).json({ error: 'Batch not found' });
+      }
+
+      await pgPool.query(
+        `DELETE FROM item_batches WHERE id=$1 AND item_id=$2`,
         [batchId, itemId]
       );
 
-      if (rows.length === 0) {
-        return res.status(404).json({ error: 'Batch not found' });
-      }
+      await logActivity(itemId, currentRows[0].item_name, 'removed', currentRows[0].quantity);
 
       res.status(200).json({ message: 'Batch deleted successfully' });
     } catch (error) {
