@@ -12,7 +12,9 @@ const pgPool = new Pool({
   ssl: { rejectUnauthorized: false }, // required for Supabase
 });
 
-export { pgPool };
+// Export both names so older repositories that still import `pool`
+// keep working while the codebase converges on `pgPool`.
+export { pgPool, pgPool as pool };
 
 // === AWS RDS / MySQL (uncomment below and comment out the Postgres block above to switch) ===
 // Also update src/repositories/userRepository.js to use mysqlProvider.
