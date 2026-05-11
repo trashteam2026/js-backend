@@ -3,7 +3,12 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 
+import activityRoutes from './routes/activityRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import categoriesRoutes from './routes/categoriesRoutes.js';
+import itemRoutes from './routes/itemRoutes.js';
+import barcodeRoutes from './routes/barcodeRoutes.js';
+import inventoryRoutes from './routes/inventoryRoutes.js';
 
 dotenv.config();
 
@@ -14,7 +19,13 @@ const corsOptions = {
     const allowedOrigins = [
       process.env.FRONTEND_URL,
       process.env.FRONTEND_URL_DEV,
-    ];
+      'http://localhost:5173',
+      'https://localhost:5173',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    ].filter(Boolean);
 
     if (allowedOrigins.includes(origin) || !origin) {
       callback(null, true);
@@ -39,6 +50,9 @@ app.use((req, res, next) => {
 });
 
 app.use('/auth', authRoutes);
+app.use('/categories', categoriesRoutes);
+app.use('/items', itemRoutes);
+app.use('/activity', activityRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
