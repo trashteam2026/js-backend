@@ -137,14 +137,21 @@ const itemController = {
       }
 
       values.push(itemId);
-      const { rows } = await pgPool.query(
-        `UPDATE items SET ${updates.join(', ')} WHERE id=$${idx} RETURNING *`,
+      const { rowCount } = await pgPool.query(
+        `UPDATE items SET ${updates.join(', ')} WHERE id=$${idx}`,
         values
       );
 
-      if (rows.length === 0) {
+      if (rowCount === 0) {
         return res.status(404).json({ error: 'Item not found' });
       }
+
+      const { rows } = await pgPool.query(
+        `${ITEM_SELECT}
+         WHERE i.id = $1
+         GROUP BY i.id, c.name`,
+        [itemId]
+      );
 
       res.status(200).json(rows[0]);
     } catch (error) {
