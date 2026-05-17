@@ -9,6 +9,13 @@ const parseItemId = (idParam) => {
 const ITEM_SELECT = `
   SELECT
     i.id,
+    (
+      SELECT ib.barcode
+      FROM item_barcodes ib
+      WHERE ib.item_id = i.id
+      ORDER BY ib.created_at ASC, ib.id ASC
+      LIMIT 1
+    ) AS barcode,
     i.name,
     i.category_id,
     i.low_stock_threshold,
@@ -66,7 +73,19 @@ const itemController = {
         [itemId]
       );
 
-      res.status(200).json({ ...itemRows[0], batches: batchRows });
+      const { rows: barcodeRows } = await pgPool.query(
+        `SELECT id, barcode, created_at
+         FROM item_barcodes
+         WHERE item_id = $1
+         ORDER BY created_at ASC, id ASC`,
+        [itemId]
+      );
+
+      res.status(200).json({
+        ...itemRows[0],
+        batches: batchRows,
+        barcodes: barcodeRows,
+      });
     } catch (error) {
       console.error('Get item by id error:', error);
       res.status(500).json({ error: 'Internal server error' });

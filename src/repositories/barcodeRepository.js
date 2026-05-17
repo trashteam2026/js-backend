@@ -14,8 +14,9 @@ export const getItemByBarcode = async (barcode) => {
       c.id AS category_id,
       c.name AS category_name
     FROM items i
+    INNER JOIN item_barcodes ib ON ib.item_id = i.id
     LEFT JOIN categories c ON c.id = i.category_id
-    WHERE i.barcode = $1
+    WHERE ib.barcode = $1
     LIMIT 1;
   `;
   const result = await pgPool.query(query, [barcode]);
