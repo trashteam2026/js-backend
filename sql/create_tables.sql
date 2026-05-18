@@ -51,6 +51,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_items_barcode
 ON items (barcode)
 WHERE barcode IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS item_barcodes (
+  id         SERIAL PRIMARY KEY,
+  item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  barcode    VARCHAR(50) NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO item_barcodes (item_id, barcode)
+SELECT id, barcode
+FROM items
+WHERE barcode IS NOT NULL
+ON CONFLICT (barcode) DO NOTHING;
+
+CREATE INDEX IF NOT EXISTS idx_item_barcodes_item_id
+ON item_barcodes (item_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_item_batches_item_expiration
 ON item_batches (item_id, expiration_date);
 

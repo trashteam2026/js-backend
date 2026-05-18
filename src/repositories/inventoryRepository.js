@@ -3,7 +3,13 @@ import { pgPool } from '../config/database.js';
 const INVENTORY_SELECT = `
   SELECT
     i.id,
-    i.barcode,
+    (
+      SELECT ib.barcode
+      FROM item_barcodes ib
+      WHERE ib.item_id = i.id
+      ORDER BY ib.created_at ASC, ib.id ASC
+      LIMIT 1
+    ) AS barcode,
     i.name,
     i.low_stock_threshold,
     i.created_at,
@@ -143,9 +149,17 @@ export const getItemDetailById = async (itemId) => {
     ORDER BY expiration_date ASC NULLS LAST, id ASC;
   `;
 
-  const [itemResult, batchesResult] = await Promise.all([
+  const barcodesQuery = `
+    SELECT id, barcode, created_at
+    FROM item_barcodes
+    WHERE item_id = $1
+    ORDER BY created_at ASC, id ASC;
+  `;
+
+  const [itemResult, batchesResult, barcodesResult] = await Promise.all([
     pgPool.query(itemQuery, [itemId]),
     pgPool.query(batchesQuery, [itemId]),
+    pgPool.query(barcodesQuery, [itemId]),
   ]);
 
   const row = itemResult.rows[0];
@@ -176,6 +190,7 @@ export const getItemDetailById = async (itemId) => {
       expiration_date: batch.expiration_date,
       quantity: Number(batch.quantity),
     })),
+    barcodes: barcodesResult.rows,
   };
 };
 
@@ -198,9 +213,15 @@ export const checkInInventoryItem = async ({
     if (normalizedBarcode) {
       const existingItemResult = await client.query(
         `
-          SELECT id, barcode, name, category_id, low_stock_threshold
-          FROM items
-          WHERE barcode = $1
+          SELECT
+            i.id,
+            ib.barcode,
+            i.name,
+            i.category_id,
+            i.low_stock_threshold
+          FROM items i
+          INNER JOIN item_barcodes ib ON ib.item_id = i.id
+          WHERE ib.barcode = $1
           LIMIT 1;
         `,
         [normalizedBarcode]
@@ -209,27 +230,56 @@ export const checkInInventoryItem = async ({
       if (existingItemResult.rows[0]) {
         const itemResult = await client.query(
           `
-          UPDATE items
-          SET
-            name = $2,
-            category_id = COALESCE($3, category_id),
-            low_stock_threshold = $4
-          WHERE barcode = $1
-          RETURNING id, barcode, name, category_id, low_stock_threshold;
-        `,
-          [normalizedBarcode, name, categoryId, lowStockThreshold]
+            UPDATE items
+            SET
+              name = $2,
+              category_id = COALESCE($3, category_id),
+              low_stock_threshold = $4
+            WHERE id = $1
+            RETURNING id, name, category_id, low_stock_threshold;
+          `,
+          [
+            existingItemResult.rows[0].id,
+            name,
+            categoryId,
+            lowStockThreshold,
+          ]
         );
-        item = itemResult.rows[0];
+        item = { ...itemResult.rows[0], barcode: normalizedBarcode };
       } else {
-        const itemResult = await client.query(
+        const matchingItemResult = await client.query(
           `
-            INSERT INTO items (barcode, name, category_id, low_stock_threshold)
-            VALUES ($1, $2, $3, $4)
+            SELECT id, name, category_id, low_stock_threshold
+            FROM items
+            WHERE LOWER(name) = LOWER($1)
+              AND category_id IS NOT DISTINCT FROM $2
+            LIMIT 1;
+          `,
+          [name, categoryId]
+        );
+
+        if (matchingItemResult.rows[0]) {
+          item = matchingItemResult.rows[0];
+        } else {
+          const itemResult = await client.query(
+            `
+            INSERT INTO items (name, category_id, low_stock_threshold)
+            VALUES ($1, $2, $3)
             RETURNING id, barcode, name, category_id, low_stock_threshold;
           `,
-          [normalizedBarcode, name, categoryId, lowStockThreshold]
+            [name, categoryId, lowStockThreshold]
+          );
+          item = itemResult.rows[0];
+        }
+
+        await client.query(
+          `
+            INSERT INTO item_barcodes (item_id, barcode)
+            VALUES ($1, $2);
+          `,
+          [item.id, normalizedBarcode]
         );
-        item = itemResult.rows[0];
+        item = { ...item, barcode: normalizedBarcode };
       }
     } else {
       // When there is no barcode, we still avoid duplicate catalog rows by
