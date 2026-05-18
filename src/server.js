@@ -53,6 +53,8 @@ app.use('/auth', authRoutes);
 app.use('/categories', categoriesRoutes);
 app.use('/items', itemRoutes);
 app.use('/activity', activityRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/barcode', barcodeRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });

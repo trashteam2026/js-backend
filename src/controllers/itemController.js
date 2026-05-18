@@ -10,6 +10,7 @@ const ITEM_SELECT = `
   SELECT
     i.id,
     i.name,
+    i.barcode,
     i.category_id,
     i.low_stock_threshold,
     i.created_at,

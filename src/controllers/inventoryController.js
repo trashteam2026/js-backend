@@ -1,5 +1,6 @@
 import {
   checkInInventoryItem,
+  checkOutInventoryItem,
   createCategory,
   getCategoriesWithItems,
   getItemDetailById,
@@ -164,6 +165,80 @@ const inventoryController = {
       if (error.code === '23503') {
         return res.status(400).json({ error: 'categoryId does not exist' });
       }
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  },
+
+  async checkOut(req, res) {
+    try {
+      const { barcode, itemId, quantity } = req.body;
+
+      const normalizedQuantity = parsePositiveInteger(quantity, null);
+      if (normalizedQuantity === null) {
+        return res
+          .status(400)
+          .json({ error: 'quantity must be a positive integer' });
+      }
+
+      const hasBarcode =
+        typeof barcode === 'string' && barcode.trim().length > 0;
+      const normalizedItemId =
+        itemId === undefined || itemId === null || itemId === ''
+          ? null
+          : parsePositiveInteger(itemId, null);
+      if (itemId !== undefined && itemId !== null && itemId !== '' && normalizedItemId === null) {
+        return res
+          .status(400)
+          .json({ error: 'itemId must be a positive integer' });
+      }
+
+      if (!hasBarcode && normalizedItemId === null) {
+        return res
+          .status(400)
+          .json({ error: 'barcode or itemId is required' });
+      }
+
+      let result;
+      try {
+        result = await checkOutInventoryItem({
+          barcode: hasBarcode ? barcode.trim() : null,
+          itemId: normalizedItemId,
+          quantity: normalizedQuantity,
+        });
+      } catch (error) {
+        if (error.code === 'BARCODE_NOT_FOUND') {
+          return res.status(404).json({
+            error: 'No item is registered for this barcode',
+            code: 'BARCODE_NOT_FOUND',
+            barcode: error.barcode,
+          });
+        }
+        if (error.code === 'ITEM_NOT_FOUND') {
+          return res
+            .status(404)
+            .json({ error: 'Item not found', code: 'ITEM_NOT_FOUND' });
+        }
+        if (error.code === 'INSUFFICIENT_STOCK') {
+          return res.status(409).json({
+            error: 'Insufficient stock for the requested quantity',
+            code: 'INSUFFICIENT_STOCK',
+            requested: error.requested,
+            available: error.available,
+          });
+        }
+        throw error;
+      }
+
+      const itemDetail = await getItemDetailById(result.item.id);
+
+      res.status(200).json({
+        message: 'Inventory item checked out successfully',
+        item: itemDetail,
+        removed: result.removed,
+        batchesAffected: result.batchesAffected,
+      });
+    } catch (error) {
+      console.error('Inventory check-out error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   },
