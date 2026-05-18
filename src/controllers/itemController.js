@@ -9,6 +9,13 @@ const parseItemId = (idParam) => {
 const ITEM_SELECT = `
   SELECT
     i.id,
+    (
+      SELECT ib.barcode
+      FROM item_barcodes ib
+      WHERE ib.item_id = i.id
+      ORDER BY ib.created_at ASC, ib.id ASC
+      LIMIT 1
+    ) AS barcode,
     i.name,
     i.barcode,
     i.category_id,
@@ -70,7 +77,19 @@ const itemController = {
         [itemId]
       );
 
-      res.status(200).json({ ...itemRows[0], batches: batchRows });
+      const { rows: barcodeRows } = await pgPool.query(
+        `SELECT id, barcode, created_at
+         FROM item_barcodes
+         WHERE item_id = $1
+         ORDER BY created_at ASC, id ASC`,
+        [itemId]
+      );
+
+      res.status(200).json({
+        ...itemRows[0],
+        batches: batchRows,
+        barcodes: barcodeRows,
+      });
     } catch (error) {
       console.error('Get item by id error:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -141,14 +160,21 @@ const itemController = {
       }
 
       values.push(itemId);
-      const { rows } = await pgPool.query(
-        `UPDATE items SET ${updates.join(', ')} WHERE id=$${idx} RETURNING *`,
+      const { rowCount } = await pgPool.query(
+        `UPDATE items SET ${updates.join(', ')} WHERE id=$${idx}`,
         values
       );
 
-      if (rows.length === 0) {
+      if (rowCount === 0) {
         return res.status(404).json({ error: 'Item not found' });
       }
+
+      const { rows } = await pgPool.query(
+        `${ITEM_SELECT}
+         WHERE i.id = $1
+         GROUP BY i.id, c.name`,
+        [itemId]
+      );
 
       res.status(200).json(rows[0]);
     } catch (error) {
