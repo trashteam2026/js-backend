@@ -111,26 +111,53 @@ const categoriesController = {
   },
 
   async deleteCategory(req, res) {
+    const categoryId = parseCategoryId(req.params.id);
+
+    if (!categoryId) {
+      return res.status(400).json({ error: 'Invalid category id' });
+    }
+
+    const client = await pgPool.connect();
     try {
-      const categoryId = parseCategoryId(req.params.id);
+      await client.query('BEGIN');
 
-      if (!categoryId) {
-        return res.status(400).json({ error: 'Invalid category id' });
-      }
-
-      const { rows } = await pgPool.query(
-        `DELETE FROM categories
-         WHERE id = $1
-         RETURNING id`,
+      const { rows: itemRows } = await client.query(
+        `SELECT i.id, i.name, COALESCE(SUM(b.quantity), 0)::int AS total_quantity
+         FROM items i
+         LEFT JOIN item_batches b ON b.item_id = i.id
+         WHERE i.category_id = $1
+         GROUP BY i.id, i.name`,
         [categoryId]
       );
 
-      if (rows.length === 0) {
+      for (const item of itemRows) {
+        if (item.total_quantity > 0) {
+          await client.query(
+            `INSERT INTO activity_log (item_id, item_name, action, quantity)
+             VALUES (NULL, $1, 'removed', $2)`,
+            [item.name, item.total_quantity]
+          );
+        }
+      }
+
+      await client.query(`DELETE FROM items WHERE category_id = $1`, [
+        categoryId,
+      ]);
+
+      const { rows: deletedCategory } = await client.query(
+        `DELETE FROM categories WHERE id = $1 RETURNING id`,
+        [categoryId]
+      );
+
+      if (deletedCategory.length === 0) {
+        await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Category not found' });
       }
 
+      await client.query('COMMIT');
       res.status(200).json({ message: 'Category deleted successfully' });
     } catch (error) {
+      await client.query('ROLLBACK');
       console.error('Delete category error:', error);
       if (error.code === '23503') {
         return res.status(409).json({
@@ -138,6 +165,8 @@ const categoriesController = {
         });
       }
       res.status(500).json({ error: 'Internal server error' });
+    } finally {
+      client.release();
     }
   },
 };
