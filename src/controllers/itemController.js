@@ -17,7 +17,6 @@ const ITEM_SELECT = `
       LIMIT 1
     ) AS barcode,
     i.name,
-    i.barcode,
     i.category_id,
     i.low_stock_threshold,
     i.created_at,

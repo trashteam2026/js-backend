@@ -360,7 +360,11 @@ export const checkOutInventoryItem = async ({ barcode, itemId, quantity }) => {
       }
     } else {
       const result = await client.query(
-        `SELECT id, name FROM items WHERE barcode = $1 LIMIT 1;`,
+        `SELECT i.id, i.name
+           FROM items i
+           INNER JOIN item_barcodes ib ON ib.item_id = i.id
+          WHERE ib.barcode = $1
+          LIMIT 1;`,
         [barcode]
       );
       itemRow = result.rows[0];
