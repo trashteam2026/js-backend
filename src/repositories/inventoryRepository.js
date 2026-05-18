@@ -339,3 +339,113 @@ export const checkInInventoryItem = async ({
     client.release();
   }
 };
+
+export const checkOutInventoryItem = async ({ barcode, itemId, quantity }) => {
+  const client = await pgPool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    let itemRow;
+    if (itemId) {
+      const result = await client.query(
+        `SELECT id, name FROM items WHERE id = $1 LIMIT 1;`,
+        [itemId]
+      );
+      itemRow = result.rows[0];
+      if (!itemRow) {
+        const err = new Error('Item not found');
+        err.code = 'ITEM_NOT_FOUND';
+        throw err;
+      }
+    } else {
+      const result = await client.query(
+        `SELECT id, name FROM items WHERE barcode = $1 LIMIT 1;`,
+        [barcode]
+      );
+      itemRow = result.rows[0];
+      if (!itemRow) {
+        const err = new Error('No item registered for this barcode');
+        err.code = 'BARCODE_NOT_FOUND';
+        err.barcode = barcode;
+        throw err;
+      }
+    }
+
+    // FOR UPDATE locks the matched batch rows for the duration of this
+    // transaction so a concurrent checkout cannot read the same stock and
+    // double-decrement it.
+    const batchesResult = await client.query(
+      `SELECT id, expiration_date, quantity
+         FROM item_batches
+        WHERE item_id = $1
+        ORDER BY expiration_date ASC NULLS LAST, id ASC
+        FOR UPDATE;`,
+      [itemRow.id]
+    );
+
+    const available = batchesResult.rows.reduce(
+      (sum, row) => sum + Number(row.quantity),
+      0
+    );
+
+    if (available < quantity) {
+      const err = new Error('Insufficient stock');
+      err.code = 'INSUFFICIENT_STOCK';
+      err.requested = quantity;
+      err.available = available;
+      throw err;
+    }
+
+    let remaining = quantity;
+    const batchesAffected = [];
+
+    for (const batch of batchesResult.rows) {
+      if (remaining === 0) break;
+
+      const batchQty = Number(batch.quantity);
+      if (batchQty === 0) continue;
+
+      const take = Math.min(batchQty, remaining);
+      const newQty = batchQty - take;
+      remaining -= take;
+
+      if (newQty === 0) {
+        await client.query(`DELETE FROM item_batches WHERE id = $1;`, [
+          batch.id,
+        ]);
+      } else {
+        await client.query(
+          `UPDATE item_batches SET quantity = $1 WHERE id = $2;`,
+          [newQty, batch.id]
+        );
+      }
+
+      batchesAffected.push({
+        id: batch.id,
+        expiration_date: batch.expiration_date,
+        quantity_removed: take,
+        remaining: newQty,
+      });
+    }
+
+    await client.query(
+      `INSERT INTO activity_log (item_id, item_name, action, quantity)
+       VALUES ($1, $2, 'removed', $3);`,
+      [itemRow.id, itemRow.name, quantity]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      item: itemRow,
+      removed: quantity,
+      batchesAffected,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};

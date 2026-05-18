@@ -30,4 +30,13 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
+// Volunteers sign in anonymously; any other Firebase sign-in provider counts
+// as an owner under the existing role model. Use after authMiddleware.
+export const requireOwner = (req, res, next) => {
+  if (req.user?.firebase?.sign_in_provider === 'anonymous') {
+    return res.status(403).json({ error: 'Owner access required' });
+  }
+  next();
+};
+
 export default authMiddleware;

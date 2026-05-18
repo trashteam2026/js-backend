@@ -17,11 +17,15 @@ const ITEM_SELECT = `
       LIMIT 1
     ) AS barcode,
     i.name,
+    i.barcode,
     i.category_id,
     i.low_stock_threshold,
     i.created_at,
     c.name AS category_name,
     COALESCE(SUM(b.quantity), 0)::int AS total_quantity,
+    MIN(b.expiration_date) FILTER (
+      WHERE b.quantity > 0 AND b.expiration_date IS NOT NULL
+    ) AS earliest_expiration,
     CASE
       WHEN COALESCE(SUM(b.quantity), 0) = 0                        THEN 'out_of_stock'
       WHEN COALESCE(SUM(b.quantity), 0) <= i.low_stock_threshold   THEN 'low_stock'

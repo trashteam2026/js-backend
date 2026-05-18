@@ -114,10 +114,25 @@ const categoriesController = {
     const client = await pgPool.connect();
 
     try {
-      const categoryId = parseCategoryId(req.params.id);
+      await client.query('BEGIN');
 
-      if (!categoryId) {
-        return res.status(400).json({ error: 'Invalid category id' });
+      const { rows: itemRows } = await client.query(
+        `SELECT i.id, i.name, COALESCE(SUM(b.quantity), 0)::int AS total_quantity
+         FROM items i
+         LEFT JOIN item_batches b ON b.item_id = i.id
+         WHERE i.category_id = $1
+         GROUP BY i.id, i.name`,
+        [categoryId]
+      );
+
+      for (const item of itemRows) {
+        if (item.total_quantity > 0) {
+          await client.query(
+            `INSERT INTO activity_log (item_id, item_name, action, quantity)
+             VALUES (NULL, $1, 'removed', $2)`,
+            [item.name, item.total_quantity]
+          );
+        }
       }
 
       await client.query('BEGIN');
