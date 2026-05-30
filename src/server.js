@@ -9,6 +9,7 @@ import categoriesRoutes from './routes/categoriesRoutes.js';
 import itemRoutes from './routes/itemRoutes.js';
 import barcodeRoutes from './routes/barcodeRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
+import volunteerRoutes from './routes/volunteerRoutes.js';
 
 dotenv.config();
 
@@ -33,7 +34,7 @@ const corsOptions = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   maxAge: 86400,
@@ -55,6 +56,7 @@ app.use('/items', itemRoutes);
 app.use('/activity', activityRoutes);
 app.use('/api/barcode', barcodeRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/volunteer', volunteerRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });

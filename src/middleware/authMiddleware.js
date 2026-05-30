@@ -39,4 +39,20 @@ export const requireOwner = (req, res, next) => {
   next();
 };
 
+// Authenticates if token present; continues without setting req.user if not.
+export const optionalAuth = async (req, _res, next) => {
+  const authHeader = req.headers.authorization;
+  const token =
+    authHeader && authHeader.startsWith('Bearer ')
+      ? authHeader.split(' ')[1]
+      : null;
+  if (!token) return next();
+  try {
+    req.user = await admin.auth().verifyIdToken(token);
+  } catch {
+    // non-fatal — proceed unauthenticated
+  }
+  next();
+};
+
 export default authMiddleware;

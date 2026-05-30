@@ -201,6 +201,8 @@ export const checkInInventoryItem = async ({
   quantity,
   categoryId = null,
   lowStockThreshold = 10,
+  volunteerName = null,
+  volunteerUid = null,
 }) => {
   const client = await pgPool.connect();
   const normalizedBarcode = normalizeOptionalBarcode(barcode);
@@ -323,14 +325,40 @@ export const checkInInventoryItem = async ({
 
     await client.query('COMMIT');
 
+    const batchId = batchResult.rows[0].id;
+    let activityLogId = null;
+
+    // Log to activity_log outside the main transaction so a logging failure
+    // never rolls back a successful check-in.
+    try {
+      const logResult = await pgPool.query(
+        `INSERT INTO activity_log (item_id, item_name, action, quantity, volunteer_name, volunteer_uid, batch_id)
+         VALUES ($1, $2, 'added', $3, $4, $5, $6)
+         RETURNING id;`,
+        [item.id, item.name, quantity, volunteerName || null, volunteerUid || null, batchId]
+      );
+      activityLogId = logResult.rows[0].id;
+    } catch {
+      try {
+        await pgPool.query(
+          `INSERT INTO activity_log (item_id, item_name, action, quantity)
+           VALUES ($1, $2, 'added', $3);`,
+          [item.id, item.name, quantity]
+        );
+      } catch (logErr) {
+        console.error('Failed to write check-in to activity_log:', logErr);
+      }
+    }
+
     return {
       item,
       batch: {
-        id: batchResult.rows[0].id,
+        id: batchId,
         item_id: batchResult.rows[0].item_id,
         expiration_date: batchResult.rows[0].expiration_date,
         quantity: Number(batchResult.rows[0].quantity),
       },
+      activityLogId,
     };
   } catch (error) {
     await client.query('ROLLBACK');

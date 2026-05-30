@@ -5,6 +5,7 @@ import {
   getCategoriesWithItems,
   getItemDetailById,
 } from '../repositories/inventoryRepository.js';
+import { isVolunteerSessionActive } from './volunteerController.js';
 
 const parsePositiveInteger = (value, fallback) => {
   if (value === undefined || value === null || value === '') {
@@ -88,6 +89,19 @@ const inventoryController = {
 
   async checkIn(req, res) {
     try {
+      // Owners (non-anonymous, authenticated) can always check in.
+      // Everyone else — anonymous volunteers or unauthenticated requests —
+      // must belong to an active session. This prevents the check from being
+      // bypassed simply by omitting the Authorization header.
+      if (!req.user || req.user.firebase?.sign_in_provider === 'anonymous') {
+        if (!isVolunteerSessionActive(req.user?.uid)) {
+          return res.status(403).json({
+            error: 'Volunteer session has ended',
+            code: 'SESSION_ENDED',
+          });
+        }
+      }
+
       const {
         barcode,
         name,
@@ -95,6 +109,7 @@ const inventoryController = {
         quantity,
         categoryId,
         lowStockThreshold,
+        volunteerName,
       } = req.body;
 
       if (!name || !expirationDate) {
@@ -151,6 +166,10 @@ const inventoryController = {
         quantity: normalizedQuantity,
         categoryId: normalizedCategoryId,
         lowStockThreshold: normalizedLowStockThreshold,
+        volunteerName: volunteerName && typeof volunteerName === 'string'
+          ? volunteerName.trim() || null
+          : null,
+        volunteerUid: req.user?.uid ?? null,
       });
 
       const itemDetail = await getItemDetailById(result.item.id);
@@ -159,6 +178,7 @@ const inventoryController = {
         message: 'Inventory item checked in successfully',
         item: itemDetail,
         batch: result.batch,
+        activityLogId: result.activityLogId,
       });
     } catch (error) {
       console.error('Inventory check-in error:', error);
