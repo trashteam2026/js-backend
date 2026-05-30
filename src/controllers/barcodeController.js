@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 import {
+  createItemWithGeneratedBarcode,
   getBarcodeMapping,
   getItemByBarcode,
   setBarcodeMapping,
@@ -82,6 +83,44 @@ const lookupProvider = async (providerName, lookupFn, barcode) => {
   }
 };
 
+const calculateUpcACheckDigit = (elevenDigits) => {
+  const sum = elevenDigits
+    .split('')
+    .reduce((total, digit, index) => {
+      const value = Number.parseInt(digit, 10);
+      return total + value * (index % 2 === 0 ? 3 : 1);
+    }, 0);
+
+  return String((10 - (sum % 10)) % 10);
+};
+
+const generateLocalUseUpcA = () => {
+  let body = '4';
+  while (body.length < 11) {
+    body += Math.floor(Math.random() * 10);
+  }
+
+  return `${body}${calculateUpcACheckDigit(body)}`;
+};
+
+const isBarcodeKnownExternally = async (barcode) => {
+  const openFoodFactsResult = await lookupProvider(
+    'Open Food Facts',
+    lookupOpenFoodFacts,
+    barcode
+  );
+  if (openFoodFactsResult) {
+    return true;
+  }
+
+  const upcItemDbResult = await lookupProvider(
+    'UPCItemDB',
+    lookupUpcItemDb,
+    barcode
+  );
+  return Boolean(upcItemDbResult);
+};
+
 export const lookupBarcode = async (req, res) => {
   const { barcode } = req.body;
 
@@ -141,6 +180,67 @@ export const lookupBarcode = async (req, res) => {
       return res.status(503).json({ error: 'Barcode provider rate limit hit' });
     }
     return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const generateBarcode = async (req, res) => {
+  const name = req.body.name?.trim();
+  const categoryId = Number.parseInt(req.body.categoryId, 10);
+
+  if (!name || !Number.isInteger(categoryId) || categoryId <= 0) {
+    return res
+      .status(400)
+      .json({ error: 'name and categoryId are required' });
+  }
+
+  try {
+    const maxAttempts = 25;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const barcode = generateLocalUseUpcA();
+      const [existingItem, customMapping] = await Promise.all([
+        getItemByBarcode(barcode),
+        getBarcodeMapping(barcode),
+      ]);
+
+      if (existingItem || customMapping) {
+        continue;
+      }
+
+      const knownExternally = await isBarcodeKnownExternally(barcode);
+      if (knownExternally) {
+        continue;
+      }
+
+      try {
+        const item = await createItemWithGeneratedBarcode({
+          barcode,
+          name,
+          categoryId,
+        });
+
+        return res.status(201).json({
+          message: 'Barcode generated successfully',
+          item,
+          barcode,
+        });
+      } catch (error) {
+        if (error.code === '23505') {
+          continue;
+        }
+        if (error.code === 'CATEGORY_NOT_FOUND') {
+          return res.status(400).json({ error: 'categoryId does not exist' });
+        }
+        throw error;
+      }
+    }
+
+    return res.status(409).json({
+      error: 'Could not generate an unused barcode. Please try again.',
+    });
+  } catch (error) {
+    console.error('Error generating barcode:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
