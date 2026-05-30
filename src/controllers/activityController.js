@@ -33,6 +33,161 @@ const activityController = {
       res.status(500).json({ error: 'Internal server error' });
     }
   },
+
+  async updateLog(req, res) {
+    const logId = parseInt(req.params.id, 10);
+    const newQty = parseInt(req.body.quantity, 10);
+
+    if (!Number.isInteger(logId) || logId <= 0) {
+      return res.status(400).json({ error: 'Invalid log id' });
+    }
+    if (!Number.isInteger(newQty) || newQty <= 0) {
+      return res.status(400).json({ error: 'quantity must be a positive integer' });
+    }
+
+    const client = await pgPool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const { rows } = await client.query(
+        `SELECT id, quantity, batch_id, volunteer_uid
+         FROM activity_log
+         WHERE id = $1 AND action = 'added'
+         FOR UPDATE`,
+        [logId]
+      );
+
+      if (!rows[0]) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Log entry not found' });
+      }
+
+      const log = rows[0];
+
+      if (log.volunteer_uid !== req.user.uid) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      if (!log.batch_id) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Cannot edit — no batch reference available' });
+      }
+
+      const delta = newQty - Number(log.quantity);
+
+      if (delta !== 0) {
+        const batchRows = await client.query(
+          `SELECT quantity FROM item_batches WHERE id = $1 FOR UPDATE`,
+          [log.batch_id]
+        );
+
+        if (!batchRows.rows[0]) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'Cannot edit — the batch no longer exists' });
+        }
+
+        const newBatchQty = Number(batchRows.rows[0].quantity) + delta;
+
+        if (newBatchQty < 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            error: 'Cannot reduce quantity — items may have already been checked out',
+            code: 'INSUFFICIENT_STOCK',
+          });
+        }
+
+        if (newBatchQty === 0) {
+          await client.query(`DELETE FROM item_batches WHERE id = $1`, [log.batch_id]);
+        } else {
+          await client.query(`UPDATE item_batches SET quantity = $1 WHERE id = $2`, [newBatchQty, log.batch_id]);
+        }
+      }
+
+      await client.query(`UPDATE activity_log SET quantity = $1 WHERE id = $2`, [newQty, logId]);
+      await client.query('COMMIT');
+
+      return res.json({ success: true, quantity: newQty });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Update activity log error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    } finally {
+      client.release();
+    }
+  },
+
+  async deleteLog(req, res) {
+    const logId = parseInt(req.params.id, 10);
+
+    if (!Number.isInteger(logId) || logId <= 0) {
+      return res.status(400).json({ error: 'Invalid log id' });
+    }
+
+    const client = await pgPool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const { rows } = await client.query(
+        `SELECT id, quantity, batch_id, volunteer_uid
+         FROM activity_log
+         WHERE id = $1 AND action = 'added'
+         FOR UPDATE`,
+        [logId]
+      );
+
+      if (!rows[0]) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Log entry not found' });
+      }
+
+      const log = rows[0];
+
+      if (log.volunteer_uid !== req.user.uid) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      if (!log.batch_id) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Cannot delete — no batch reference available' });
+      }
+
+      const batchRows = await client.query(
+        `SELECT quantity FROM item_batches WHERE id = $1 FOR UPDATE`,
+        [log.batch_id]
+      );
+
+      if (batchRows.rows[0]) {
+        const newBatchQty = Number(batchRows.rows[0].quantity) - Number(log.quantity);
+
+        if (newBatchQty < 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            error: 'Cannot delete — items may have already been checked out',
+            code: 'INSUFFICIENT_STOCK',
+          });
+        }
+
+        if (newBatchQty === 0) {
+          await client.query(`DELETE FROM item_batches WHERE id = $1`, [log.batch_id]);
+        } else {
+          await client.query(`UPDATE item_batches SET quantity = $1 WHERE id = $2`, [newBatchQty, log.batch_id]);
+        }
+      }
+
+      await client.query(`DELETE FROM activity_log WHERE id = $1`, [logId]);
+      await client.query('COMMIT');
+
+      return res.json({ success: true });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Delete activity log error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    } finally {
+      client.release();
+    }
+  },
 };
 
 export default activityController;
