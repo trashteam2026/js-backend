@@ -5,7 +5,10 @@ import {
   getCategoriesWithItems,
   getItemDetailById,
 } from '../repositories/inventoryRepository.js';
-import { isVolunteerSessionActive } from './volunteerController.js';
+import {
+  incrementItemsScanned,
+  isVolunteerSessionActive,
+} from './volunteerController.js';
 
 const parsePositiveInteger = (value, fallback) => {
   if (value === undefined || value === null || value === '') {
@@ -94,7 +97,7 @@ const inventoryController = {
       // must belong to an active session. This prevents the check from being
       // bypassed simply by omitting the Authorization header.
       if (!req.user || req.user.firebase?.sign_in_provider === 'anonymous') {
-        if (!isVolunteerSessionActive(req.user?.uid)) {
+        if (!(await isVolunteerSessionActive(req.user?.uid))) {
           return res.status(403).json({
             error: 'Volunteer session has ended',
             code: 'SESSION_ENDED',
@@ -171,6 +174,18 @@ const inventoryController = {
           : null,
         volunteerUid: req.user?.uid ?? null,
       });
+
+      // Count this check-in toward the volunteer's running total. Only anonymous
+      // volunteers have an active_volunteers row; for owners this no-ops. Run
+      // after the check-in has committed and isolate failures so a counter error
+      // can never roll back a successful check-in.
+      if (req.user?.firebase?.sign_in_provider === 'anonymous') {
+        try {
+          await incrementItemsScanned(req.user.uid);
+        } catch (incrementError) {
+          console.error('Failed to increment itemsScanned:', incrementError);
+        }
+      }
 
       const itemDetail = await getItemDetailById(result.item.id);
 
