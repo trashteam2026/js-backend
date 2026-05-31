@@ -50,13 +50,27 @@ const categoriesController = {
   async createCategory(req, res) {
     try {
       const name = req.body.name?.trim();
-      const { parent_group = 'food', display_order = 0 } = req.body;
+      const { parent_group = 'food' } = req.body;
+      let { display_order } = req.body;
 
       if (!name) {
         return res.status(400).json({ error: 'Category name is required' });
       }
       if (!['food', 'non_food'].includes(parent_group)) {
         return res.status(400).json({ error: 'parent_group must be food or non_food' });
+      }
+
+      // When the caller doesn't specify an order, place the new category at the
+      // bottom of its parent group instead of defaulting to 0 (which would sort
+      // it above the seeded categories).
+      if (display_order === undefined || display_order === null) {
+        const { rows: orderRows } = await pgPool.query(
+          `SELECT COALESCE(MAX(display_order), -1) + 1 AS next_order
+           FROM categories
+           WHERE parent_group = $1`,
+          [parent_group]
+        );
+        display_order = orderRows[0].next_order;
       }
 
       const { rows } = await pgPool.query(
