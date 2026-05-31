@@ -1,6 +1,8 @@
 import { pgPool } from '../config/database.js';
 import { isVolunteerSessionActive } from './volunteerController.js';
 
+const ACTIVITY_TIME_ZONE = 'America/Chicago';
+
 const ensureActiveVolunteerSession = async (req, res) => {
   if (req.user?.firebase?.sign_in_provider !== 'anonymous') {
     return true;
@@ -27,11 +29,15 @@ const activityController = {
 
       if (start) {
         values.push(start);
-        conditions.push(`created_at >= $${values.length}::date`);
+        conditions.push(
+          `created_at >= ($${values.length}::date::timestamp AT TIME ZONE '${ACTIVITY_TIME_ZONE}')`
+        );
       }
       if (end) {
         values.push(end);
-        conditions.push(`created_at < ($${values.length}::date + INTERVAL '1 day')`);
+        conditions.push(
+          `created_at < (($${values.length}::date + INTERVAL '1 day') AT TIME ZONE '${ACTIVITY_TIME_ZONE}')`
+        );
       }
 
       const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';

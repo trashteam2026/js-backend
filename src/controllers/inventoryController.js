@@ -115,10 +115,8 @@ const inventoryController = {
         volunteerName,
       } = req.body;
 
-      if (!name || !expirationDate) {
-        return res
-          .status(400)
-          .json({ error: 'name and expirationDate are required' });
+      if (!name) {
+        return res.status(400).json({ error: 'name is required' });
       }
 
       const normalizedQuantity = parsePositiveInteger(quantity, 1);
@@ -155,19 +153,26 @@ const inventoryController = {
           .json({ error: 'lowStockThreshold must be a positive integer' });
       }
 
-      const parsedExpirationDate = new Date(expirationDate);
-      if (Number.isNaN(parsedExpirationDate.getTime())) {
-        return res
-          .status(400)
-          .json({ error: 'expirationDate must be a valid date' });
-      }
+      let normalizedExpirationDate = null;
+      if (
+        expirationDate !== undefined &&
+        expirationDate !== null &&
+        expirationDate !== ''
+      ) {
+        const parsedExpirationDate = new Date(expirationDate);
+        if (Number.isNaN(parsedExpirationDate.getTime())) {
+          return res
+            .status(400)
+            .json({ error: 'expirationDate must be a valid date' });
+        }
 
-      // We store the batch date in YYYY-MM-DD format so multiple check-ins for
-      // the same day collapse into one batch row instead of drifting apart due
-      // to timezone offsets in ISO timestamps.
-      const normalizedExpirationDate = parsedExpirationDate
-        .toISOString()
-        .slice(0, 10);
+        // We store the batch date in YYYY-MM-DD format so multiple check-ins for
+        // the same day collapse into one batch row instead of drifting apart due
+        // to timezone offsets in ISO timestamps.
+        normalizedExpirationDate = parsedExpirationDate
+          .toISOString()
+          .slice(0, 10);
+      }
 
       const result = await checkInInventoryItem({
         barcode,

@@ -109,9 +109,12 @@ export async function endSession(req, res) {
         rows[0].code,
       ]);
     }
-    await client.query(`DELETE FROM volunteer_sessions WHERE owner_uid = $1;`, [
-      req.user.uid,
-    ]);
+    await client.query(
+      `UPDATE volunteer_sessions
+          SET expires_at = LEAST(expires_at, NOW())
+        WHERE owner_uid = $1;`,
+      [req.user.uid]
+    );
     await client.query('COMMIT');
     return res.json({ success: true });
   } catch (error) {
@@ -247,10 +250,33 @@ export async function getMyProfile(req, res) {
   }
 }
 
+export async function finishVolunteering(req, res) {
+  try {
+    await pgPool.query(
+      `DELETE FROM active_volunteers WHERE volunteer_uid = $1;`,
+      [req.user.uid]
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Finish volunteering error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 // --- Owner views ---
 
 export async function getActiveVolunteers(req, res) {
   try {
+    await pgPool.query(
+      `DELETE FROM active_volunteers av
+        WHERE NOT EXISTS (
+          SELECT 1
+            FROM volunteer_sessions vs
+           WHERE vs.code = av.code
+             AND vs.expires_at > NOW()
+        );`
+    );
+
     const { rows } = await pgPool.query(
       `SELECT av.volunteer_uid AS uid,
               av.name,
@@ -271,19 +297,28 @@ export async function getActiveVolunteers(req, res) {
 
 export async function getVolunteerStats(req, res) {
   try {
-    const { rows } = await pgPool.query(`
+    const { rows } = await pgPool.query(
+      `
+      WITH current_session AS (
+        SELECT created_at
+          FROM volunteer_sessions
+         WHERE owner_uid = $1
+         LIMIT 1
+      )
       SELECT
-        volunteer_name,
+        al.volunteer_name,
         COUNT(*)::int                          AS scan_count,
-        COUNT(DISTINCT DATE(created_at))::int   AS active_days,
-        SUM(quantity)::int                     AS total_items,
-        MAX(created_at)                         AS last_active
-      FROM activity_log
-      WHERE action = 'added'
-        AND volunteer_name IS NOT NULL
-      GROUP BY volunteer_name
+        SUM(al.quantity)::int                  AS total_items,
+        MAX(al.created_at)                     AS last_active
+      FROM activity_log al
+      JOIN current_session cs ON al.created_at >= cs.created_at
+      WHERE al.action = 'added'
+        AND al.volunteer_name IS NOT NULL
+      GROUP BY al.volunteer_name
       ORDER BY last_active DESC
-    `);
+    `,
+      [req.user.uid]
+    );
     return res.json(rows);
   } catch (error) {
     console.error('Get volunteer stats error:', error);
