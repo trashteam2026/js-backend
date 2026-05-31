@@ -138,11 +138,18 @@ const inventoryController = {
           .json({ error: 'categoryId must be a positive integer' });
       }
 
-      const normalizedLowStockThreshold = parsePositiveInteger(
-        lowStockThreshold,
-        10
-      );
-      if (normalizedLowStockThreshold === null) {
+      const normalizedLowStockThreshold =
+        lowStockThreshold === undefined ||
+        lowStockThreshold === null ||
+        lowStockThreshold === ''
+          ? undefined
+          : parsePositiveInteger(lowStockThreshold, null);
+      if (
+        lowStockThreshold !== undefined &&
+        lowStockThreshold !== null &&
+        lowStockThreshold !== '' &&
+        normalizedLowStockThreshold === null
+      ) {
         return res
           .status(400)
           .json({ error: 'lowStockThreshold must be a positive integer' });

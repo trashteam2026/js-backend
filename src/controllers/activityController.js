@@ -1,4 +1,21 @@
 import { pgPool } from '../config/database.js';
+import { isVolunteerSessionActive } from './volunteerController.js';
+
+const ensureActiveVolunteerSession = async (req, res) => {
+  if (req.user?.firebase?.sign_in_provider !== 'anonymous') {
+    return true;
+  }
+
+  if (await isVolunteerSessionActive(req.user.uid)) {
+    return true;
+  }
+
+  res.status(403).json({
+    error: 'Volunteer session has ended',
+    code: 'SESSION_ENDED',
+  });
+  return false;
+};
 
 const activityController = {
   async getLogs(req, res) {
@@ -43,6 +60,10 @@ const activityController = {
     }
     if (!Number.isInteger(newQty) || newQty <= 0) {
       return res.status(400).json({ error: 'quantity must be a positive integer' });
+    }
+
+    if (!(await ensureActiveVolunteerSession(req, res))) {
+      return undefined;
     }
 
     const client = await pgPool.connect();
@@ -122,6 +143,10 @@ const activityController = {
 
     if (!Number.isInteger(logId) || logId <= 0) {
       return res.status(400).json({ error: 'Invalid log id' });
+    }
+
+    if (!(await ensureActiveVolunteerSession(req, res))) {
+      return undefined;
     }
 
     const client = await pgPool.connect();

@@ -66,16 +66,23 @@ export async function generateSession(req, res) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = generateCode();
     try {
-      await pgPool.query(
+      const { rows } = await pgPool.query(
         `INSERT INTO volunteer_sessions (owner_uid, code, created_at, expires_at)
          VALUES ($1, $2, NOW(), NOW() + ($3::int * INTERVAL '1 millisecond'))
          ON CONFLICT (owner_uid) DO UPDATE SET
            code = EXCLUDED.code,
            created_at = EXCLUDED.created_at,
-           expires_at = EXCLUDED.expires_at;`,
+           expires_at = EXCLUDED.expires_at
+         RETURNING code, created_at AS "createdAt", expires_at AS "expiresAt";`,
         [req.user.uid, code, SESSION_DURATION_MS]
       );
-      return res.json({ active: true, code });
+      const session = rows[0];
+      return res.json({
+        active: true,
+        code: session.code,
+        createdAt: session.createdAt,
+        expiresAt: session.expiresAt,
+      });
     } catch (error) {
       if (error.code === '23505') {
         continue; // code collision — generate a new one and retry
