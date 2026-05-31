@@ -43,36 +43,6 @@ const authController = {
     }
   },
 
-  async login(req, res) {
-    try {
-      const { idToken } = req.body;
-
-      if (!idToken) {
-        return res.status(400).json({
-          error: 'Firebase ID token is required',
-        });
-      }
-
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-
-      res.cookie('session', idToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 3600 * 1000,
-        path: '/',
-      });
-
-      res.status(200).json({
-        message: 'Login successful',
-        uid: decodedToken.uid,
-      });
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(401).json({ error: 'Authentication failed' });
-    }
-  },
-
   async getMe(req, res) {
     try {
       const token =
@@ -99,21 +69,6 @@ const authController = {
     } catch (error) {
       console.error('ME endpoint error:', error);
       res.status(401).json({ error: 'Authentication failed' });
-    }
-  },
-
-  async logout(_req, res) {
-    try {
-      res.clearCookie('session', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        path: '/',
-      });
-      res.json({ message: 'Logged out successfully' });
-    } catch (error) {
-      console.error('Logout error:', error);
-      res.status(500).json({ error: 'Logout failed' });
     }
   },
 
