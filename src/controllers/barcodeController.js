@@ -4,7 +4,6 @@ import {
   createItemWithGeneratedBarcode,
   getBarcodeMapping,
   getItemByBarcode,
-  setBarcodeMapping,
 } from '../repositories/barcodeRepository.js';
 
 const OPEN_FOOD_FACTS_BASE_URL = 'https://world.openfoodfacts.org/api/v2/product';
@@ -240,24 +239,6 @@ export const generateBarcode = async (req, res) => {
     });
   } catch (error) {
     console.error('Error generating barcode:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-export const setCustomName = async (req, res) => {
-  const { barcode, customName } = req.body;
-
-  if (!barcode || !customName) {
-    return res
-      .status(400)
-      .json({ error: 'Barcode and customName are required' });
-  }
-
-  try {
-    const mapping = await setBarcodeMapping(barcode, customName);
-    res.json({ message: 'Custom name set', mapping });
-  } catch (error) {
-    console.error('Error setting custom name:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

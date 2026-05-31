@@ -1,4 +1,5 @@
 import admin from '../config/firebase.js';
+import { isOwner } from '../middleware/authMiddleware.js';
 import userRepository from '../repositories/userRepository.js';
 
 const authController = {
@@ -85,10 +86,15 @@ const authController = {
 
       const user = await userRepository.findByUid(decodedToken.uid);
 
-      return res.json(user || {
-        firebaseUid: decodedToken.uid,
-        email: decodedToken.email,
-        username: decodedToken.email?.split('@')[0] || 'user',
+      const owner = isOwner(decodedToken);
+
+      return res.json({
+        ...(user || {
+          firebaseUid: decodedToken.uid,
+          email: decodedToken.email,
+          username: decodedToken.email?.split('@')[0] || 'user',
+        }),
+        isOwner: owner,
       });
     } catch (error) {
       console.error('ME endpoint error:', error);
