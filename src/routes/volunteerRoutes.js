@@ -3,6 +3,7 @@ import { Router } from 'express';
 import authMiddleware, { requireOwner } from '../middleware/authMiddleware.js';
 import {
   endSession,
+  finishVolunteering,
   generateSession,
   getActiveVolunteers,
   getMyProfile,
@@ -25,6 +26,7 @@ router.post('/verify', verifyCode);
 // Volunteer self-registration + profile (any authenticated user, including anonymous)
 router.post('/register', authMiddleware, registerVolunteer);
 router.get('/me', authMiddleware, getMyProfile);
+router.delete('/me', authMiddleware, finishVolunteering);
 
 // Owner volunteer management
 router.get('/volunteers', authMiddleware, requireOwner, getActiveVolunteers);

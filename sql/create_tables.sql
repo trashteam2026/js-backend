@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS categories (
 CREATE TABLE IF NOT EXISTS items (
   id                  SERIAL PRIMARY KEY,
   name                TEXT NOT NULL,
-  category_id         INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+  category_id         INTEGER REFERENCES categories(id) ON DELETE CASCADE,
   low_stock_threshold INTEGER NOT NULL DEFAULT 10,
   created_at          TIMESTAMPTZ DEFAULT NOW()
 );

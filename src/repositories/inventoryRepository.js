@@ -235,17 +235,11 @@ export const checkInInventoryItem = async ({
             UPDATE items
             SET
               name = $2,
-              category_id = COALESCE($3, category_id),
-              low_stock_threshold = $4
+              category_id = COALESCE($3, category_id)
             WHERE id = $1
             RETURNING id, name, category_id, low_stock_threshold;
           `,
-          [
-            existingItemResult.rows[0].id,
-            name,
-            categoryId,
-            lowStockThreshold,
-          ]
+          [existingItemResult.rows[0].id, name, categoryId]
         );
         item = { ...itemResult.rows[0], barcode: normalizedBarcode };
       } else {

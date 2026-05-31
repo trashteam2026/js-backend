@@ -5,9 +5,8 @@ import authMiddleware, { optionalAuth, requireOwner } from '../middleware/authMi
 
 const router = express.Router();
 
-router.get('/categories', inventoryController.listCategories);
-router.post('/categories', inventoryController.createCategory);
-router.get('/items/:itemId', inventoryController.getItemDetail);
+// Volunteer scan-in read — token required (anonymous volunteers OK), not owner-only.
+router.get('/categories', authMiddleware, inventoryController.listCategories);
 router.post('/check-in', optionalAuth, inventoryController.checkIn);
 router.post(
   '/check-out',
