@@ -12,7 +12,10 @@ import barcodeRoutes from './routes/barcodeRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
 import volunteerRoutes from './routes/volunteerRoutes.js';
 
-dotenv.config();
+// Only load .env.local locally — Cloud Functions provides env via secrets
+if (!process.env.FUNCTION_TARGET) {
+  dotenv.config({ path: '.env.local' });
+}
 
 const app = express();
 
@@ -86,10 +89,14 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-const PORT = process.env.PORT || 5050;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Frontend URL: ${process.env.FRONTEND_URL}`);
-  warnIfOwnerAllowlistEmpty();
-});
+if (!process.env.FUNCTION_TARGET) {
+  const PORT = process.env.PORT || 5050;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Frontend URL: ${process.env.FRONTEND_URL}`);
+    warnIfOwnerAllowlistEmpty();
+  });
+}
+
+export default app;

@@ -1,4 +1,10 @@
 .DS_STORE
 .env
+.env.local
 *.ini
 node_modules/
+
+# Firebase
+.firebase/
+.firebaserc
+firebase.json
