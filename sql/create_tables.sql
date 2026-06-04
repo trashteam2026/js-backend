@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS items (
   id                  SERIAL PRIMARY KEY,
   name                TEXT NOT NULL,
   category_id         INTEGER REFERENCES categories(id) ON DELETE CASCADE,
-  low_stock_threshold INTEGER NOT NULL DEFAULT 10,
+  low_stock_threshold INTEGER NOT NULL DEFAULT 20,
   created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 

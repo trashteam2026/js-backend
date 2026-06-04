@@ -6,9 +6,9 @@ import {
   finishVolunteering,
   generateSession,
   getActiveVolunteers,
+  getVolunteerHistory,
   getMyProfile,
   getSession,
-  getVolunteerStats,
   registerVolunteer,
   verifyCode,
 } from '../controllers/volunteerController.js';
@@ -30,6 +30,6 @@ router.delete('/me', authMiddleware, finishVolunteering);
 
 // Owner volunteer management
 router.get('/volunteers', authMiddleware, requireOwner, getActiveVolunteers);
-router.get('/stats', authMiddleware, requireOwner, getVolunteerStats);
+router.get('/history', authMiddleware, requireOwner, getVolunteerHistory);
 
 export default router;

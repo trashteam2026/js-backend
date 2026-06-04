@@ -42,11 +42,16 @@ const activityController = {
 
       const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
+      // Safety guardrail against an unbounded scan. The user already narrows the
+      // result set via the date-range picker; this cap (well above realistic
+      // single-range volume) just prevents a pathological full-table fetch. Not a
+      // UX-facing pagination cap — the response shape is unchanged.
       const { rows } = await pgPool.query(
         `SELECT id, item_id, item_name, action, quantity, created_at
          FROM activity_log
          ${where}
-         ORDER BY created_at DESC`,
+         ORDER BY created_at DESC
+         LIMIT 5000`,
         values
       );
 
@@ -208,6 +213,19 @@ const activityController = {
       }
 
       await client.query(`DELETE FROM activity_log WHERE id = $1`, [logId]);
+
+      // Keep the volunteer's running counter in step with the rows they have
+      // left. items_scanned is incremented by one per check-in, so removing one
+      // check-in decrements by one. Done in the same transaction as the delete
+      // so the two never drift, and floored at zero so no sequence of deletes
+      // can drive it negative. No-ops for non-volunteers (no matching row).
+      await client.query(
+        `UPDATE active_volunteers
+            SET items_scanned = GREATEST(items_scanned - 1, 0)
+          WHERE volunteer_uid = $1`,
+        [log.volunteer_uid]
+      );
+
       await client.query('COMMIT');
 
       return res.json({ success: true });

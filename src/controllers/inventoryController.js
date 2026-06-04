@@ -5,6 +5,7 @@ import {
   getCategoriesWithItems,
   getItemDetailById,
 } from '../repositories/inventoryRepository.js';
+import { isOwner } from '../middleware/authMiddleware.js';
 import {
   incrementItemsScanned,
   isVolunteerSessionActive,
@@ -92,17 +93,25 @@ const inventoryController = {
 
   async checkIn(req, res) {
     try {
-      // Owners (non-anonymous, authenticated) can always check in.
-      // Everyone else — anonymous volunteers or unauthenticated requests —
-      // must belong to an active session. This prevents the check from being
-      // bypassed simply by omitting the Authorization header.
-      if (!req.user || req.user.firebase?.sign_in_provider === 'anonymous') {
+      if (!req.user) {
+        return res.status(403).json({
+          error: 'Authentication required',
+          code: 'NO_TOKEN',
+        });
+      }
+
+      if (req.user.firebase?.sign_in_provider === 'anonymous') {
         if (!(await isVolunteerSessionActive(req.user?.uid))) {
           return res.status(403).json({
             error: 'Volunteer session has ended',
             code: 'SESSION_ENDED',
           });
         }
+      } else if (!isOwner(req.user)) {
+        return res.status(403).json({
+          error: 'Owner access required',
+          code: 'NOT_OWNER',
+        });
       }
 
       const {

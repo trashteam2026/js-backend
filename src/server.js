@@ -2,6 +2,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
+import helmet from 'helmet';
 
 import { warnIfOwnerAllowlistEmpty } from './middleware/authMiddleware.js';
 import activityRoutes from './routes/activityRoutes.js';
@@ -15,6 +16,9 @@ import volunteerRoutes from './routes/volunteerRoutes.js';
 dotenv.config();
 
 const app = express();
+
+// Security headers — apply early, before CORS and all routes.
+app.use(helmet());
 
 const corsOptions = {
   origin: (origin, callback) => {

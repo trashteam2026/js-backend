@@ -66,7 +66,7 @@ export const createItemWithGeneratedBarcode = async ({
       const itemResult = await client.query(
         `
           INSERT INTO items (name, category_id, low_stock_threshold)
-          VALUES ($1, $2, 10)
+          VALUES ($1, $2, 20)
           RETURNING id, name, category_id, low_stock_threshold, created_at;
         `,
         [name, categoryId]

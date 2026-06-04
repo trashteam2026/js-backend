@@ -11,13 +11,24 @@ export default {
     const sql = `
       INSERT INTO users (firebase_uid, username, email, firstname, lastname)
       VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (firebase_uid) DO UPDATE SET
-        email = EXCLUDED.email,
+      ON CONFLICT (email) DO UPDATE SET
+        firebase_uid = EXCLUDED.firebase_uid,
         firstname = EXCLUDED.firstname,
-        lastname = EXCLUDED.lastname;
+        lastname = EXCLUDED.lastname
+      RETURNING id, firebase_uid AS "firebaseUid", username, email, firstname, lastname;
     `;
-    await pgPool.query(sql, [uid, username, email, firstname, lastname]);
-    return this.findByUid(uid);
+    try {
+      const { rows } = await pgPool.query(sql, [uid, username, email, firstname, lastname]);
+      return rows[0] || this.findByUid(uid);
+    } catch (error) {
+      if (
+        error.code === '23505' &&
+        `${error.constraint || ''}`.toLowerCase().includes('firebase_uid')
+      ) {
+        return this.findByUid(uid);
+      }
+      throw error;
+    }
   },
 
   async findByUid(uid) {

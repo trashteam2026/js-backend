@@ -2,6 +2,23 @@ import admin from '../config/firebase.js';
 import { isOwner } from '../middleware/authMiddleware.js';
 import userRepository from '../repositories/userRepository.js';
 
+const setSessionCookie = (res, idToken) => {
+  res.cookie('session', idToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 3600 * 1000,
+    path: '/',
+  });
+};
+
+const getDuplicateField = (error) => {
+  const detail = `${error.constraint || ''} ${error.message || ''}`.toLowerCase();
+  if (detail.includes('username')) return 'username';
+  if (detail.includes('email')) return 'email';
+  return null;
+};
+
 const authController = {
   async signup(req, res) {
     try {
@@ -94,6 +111,12 @@ const authController = {
 
       const decodedToken = await admin.auth().verifyIdToken(idToken);
 
+      const existingUser = await userRepository.findByUid(decodedToken.uid);
+      if (existingUser) {
+        setSessionCookie(res, idToken);
+        return res.json({ success: true, user: existingUser });
+      }
+
       const user = await userRepository.upsertUser({
         uid: decodedToken.uid,
         username: decodedToken.name?.replace(/\s+/g, '_').toLowerCase() ||
@@ -104,21 +127,23 @@ const authController = {
         lastname: decodedToken.name?.split(' ').slice(1).join(' ') || null,
       })
 
-      res.cookie('session', idToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 3600 * 1000,
-        path: '/',
-      });
+      setSessionCookie(res, idToken);
 
       res.json({ success: true, user });
     } catch (error) {
       console.error('Token handling error:', error);
       if (error.code === '23505' || error.code === 'ER_DUP_ENTRY') {
-        return res
-          .status(400)
-          .json({ error: 'Username already exists, please choose another' });
+        const duplicateField = getDuplicateField(error);
+        if (duplicateField === 'username') {
+          return res
+            .status(400)
+            .json({ error: 'Username already exists, please choose another' });
+        }
+        if (duplicateField === 'email') {
+          return res
+            .status(400)
+            .json({ error: 'Email already exists for another account' });
+        }
       }
       res.status(500).json({ error: 'Internal server error' });
     }
