@@ -200,7 +200,7 @@ export const checkInInventoryItem = async ({
   expirationDate,
   quantity,
   categoryId = null,
-  lowStockThreshold = 10,
+  lowStockThreshold = 20,
   volunteerName = null,
   volunteerUid = null,
 }) => {
@@ -230,18 +230,7 @@ export const checkInInventoryItem = async ({
       );
 
       if (existingItemResult.rows[0]) {
-        const itemResult = await client.query(
-          `
-            UPDATE items
-            SET
-              name = $2,
-              category_id = COALESCE($3, category_id)
-            WHERE id = $1
-            RETURNING id, name, category_id, low_stock_threshold;
-          `,
-          [existingItemResult.rows[0].id, name, categoryId]
-        );
-        item = { ...itemResult.rows[0], barcode: normalizedBarcode };
+        item = { ...existingItemResult.rows[0], barcode: normalizedBarcode };
       } else {
         const matchingItemResult = await client.query(
           `

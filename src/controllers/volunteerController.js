@@ -5,6 +5,7 @@ import { pgPool } from '../config/database.js';
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours
+const VOLUNTEER_HISTORY_LIMIT = 500;
 
 function generateCode() {
   const buf = randomBytes(8);
@@ -295,7 +296,7 @@ export async function getActiveVolunteers(req, res) {
   }
 }
 
-export async function getVolunteerStats(req, res) {
+export async function getVolunteerHistory(req, res) {
   try {
     const { rows } = await pgPool.query(
       `
@@ -306,22 +307,27 @@ export async function getVolunteerStats(req, res) {
          LIMIT 1
       )
       SELECT
+        al.id,
+        al.item_name,
+        al.quantity::int AS quantity,
         al.volunteer_name,
-        COUNT(*)::int                          AS scan_count,
-        SUM(al.quantity)::int                  AS total_items,
-        MAX(al.created_at)                     AS last_active
+        al.created_at
       FROM activity_log al
       JOIN current_session cs ON al.created_at >= cs.created_at
       WHERE al.action = 'added'
-        AND al.volunteer_name IS NOT NULL
-      GROUP BY al.volunteer_name
-      ORDER BY last_active DESC
+        AND al.volunteer_uid IS NOT NULL
+      ORDER BY al.created_at DESC
+      LIMIT $2
     `,
-      [req.user.uid]
+      [req.user.uid, VOLUNTEER_HISTORY_LIMIT + 1]
     );
-    return res.json(rows);
+
+    return res.json({
+      history: rows.slice(0, VOLUNTEER_HISTORY_LIMIT),
+      truncated: rows.length > VOLUNTEER_HISTORY_LIMIT,
+    });
   } catch (error) {
-    console.error('Get volunteer stats error:', error);
+    console.error('Get volunteer history error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
