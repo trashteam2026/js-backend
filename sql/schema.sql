@@ -61,6 +61,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_items_barcode
   ON items (barcode)
   WHERE barcode IS NOT NULL;
 
+-- Normalized item identity: one item per (lower(trim(name)), category_id), with
+-- NULL category collapsed into a single bucket via a sentinel that can never be
+-- a real id. Lets check-in's match-or-create run as a conflict-safe upsert so
+-- concurrent same-product check-ins resolve to one row instead of splitting into
+-- duplicate catalog rows (folded from migrations/005).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_items_identity
+  ON items (LOWER(TRIM(name)), COALESCE(category_id, -1));
+
 -- ─── item_batches ───────────────────────────────────────────────────────────
 -- quantity DEFAULT 1 (live value).
 CREATE TABLE IF NOT EXISTS item_batches (

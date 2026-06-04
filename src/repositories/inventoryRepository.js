@@ -210,6 +210,27 @@ export const checkInInventoryItem = async ({
   try {
     await client.query('BEGIN');
 
+    // Atomic match-or-create against idx_items_identity
+    // (LOWER(TRIM(name)), COALESCE(category_id, -1)). The conflict target matches
+    // that index expression exactly, so two concurrent same-identity check-ins
+    // resolve to ONE row instead of both inserting under READ COMMITTED. The
+    // conflict path is a no-op touch (name = items.name) that returns the
+    // existing row WITHOUT overwriting its name/category/threshold — check-in
+    // must never rename or recategorize an existing item.
+    const resolveItem = async () => {
+      const result = await client.query(
+        `
+          INSERT INTO items (name, category_id, low_stock_threshold)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (LOWER(TRIM(name)), COALESCE(category_id, -1)) DO UPDATE SET
+            name = items.name
+          RETURNING id, barcode, name, category_id, low_stock_threshold;
+        `,
+        [name, categoryId, lowStockThreshold]
+      );
+      return result.rows[0];
+    };
+
     let item;
 
     if (normalizedBarcode) {
@@ -232,67 +253,27 @@ export const checkInInventoryItem = async ({
       if (existingItemResult.rows[0]) {
         item = { ...existingItemResult.rows[0], barcode: normalizedBarcode };
       } else {
-        const matchingItemResult = await client.query(
-          `
-            SELECT id, name, category_id, low_stock_threshold
-            FROM items
-            WHERE LOWER(name) = LOWER($1)
-              AND category_id IS NOT DISTINCT FROM $2
-            LIMIT 1;
-          `,
-          [name, categoryId]
-        );
+        item = await resolveItem();
 
-        if (matchingItemResult.rows[0]) {
-          item = matchingItemResult.rows[0];
-        } else {
-          const itemResult = await client.query(
-            `
-            INSERT INTO items (name, category_id, low_stock_threshold)
-            VALUES ($1, $2, $3)
-            RETURNING id, barcode, name, category_id, low_stock_threshold;
-          `,
-            [name, categoryId, lowStockThreshold]
-          );
-          item = itemResult.rows[0];
-        }
-
+        // Attach the barcode. ON CONFLICT (barcode) DO NOTHING makes a
+        // same-barcode race a no-op instead of a unique_violation 500: the item
+        // identity upsert above has already collapsed both concurrent check-ins
+        // onto the same row, so the barcode is already attached to that row and
+        // the batch below lands on it — no quantity is lost.
         await client.query(
           `
             INSERT INTO item_barcodes (item_id, barcode)
-            VALUES ($1, $2);
+            VALUES ($1, $2)
+            ON CONFLICT (barcode) DO NOTHING;
           `,
           [item.id, normalizedBarcode]
         );
         item = { ...item, barcode: normalizedBarcode };
       }
     } else {
-      // When there is no barcode, we still avoid duplicate catalog rows by
-      // reusing an item with the same name/category combination if one exists.
-      const existingItemResult = await client.query(
-        `
-          SELECT id, barcode, name, category_id, low_stock_threshold
-          FROM items
-          WHERE LOWER(name) = LOWER($1)
-            AND category_id IS NOT DISTINCT FROM $2
-          LIMIT 1;
-        `,
-        [name, categoryId]
-      );
-
-      if (existingItemResult.rows[0]) {
-        item = existingItemResult.rows[0];
-      } else {
-        const newItemResult = await client.query(
-          `
-            INSERT INTO items (barcode, name, category_id, low_stock_threshold)
-            VALUES (NULL, $1, $2, $3)
-            RETURNING id, barcode, name, category_id, low_stock_threshold;
-          `,
-          [name, categoryId, lowStockThreshold]
-        );
-        item = newItemResult.rows[0];
-      }
+      // No barcode: still avoid duplicate catalog rows by resolving to the
+      // existing same-identity item (or creating it) via the same upsert.
+      item = await resolveItem();
     }
 
     const batchResult = await client.query(
