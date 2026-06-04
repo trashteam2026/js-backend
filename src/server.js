@@ -2,6 +2,8 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
 
 import { warnIfOwnerAllowlistEmpty } from './middleware/authMiddleware.js';
 import activityRoutes from './routes/activityRoutes.js';
@@ -15,6 +17,21 @@ import volunteerRoutes from './routes/volunteerRoutes.js';
 dotenv.config();
 
 const app = express();
+
+// Security headers — apply early, before CORS and all routes.
+app.use(helmet());
+
+// Rate limiter for public, unauthenticated endpoints only (20 req / 15 min per
+// IP). Owner/authenticated routes are intentionally NOT limited.
+const publicLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many requests from this IP. Please try again in 15 minutes.',
+  },
+});
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -50,6 +67,13 @@ app.use((req, res, next) => {
   req.url = req.url.replace(/\/+/g, '/');
   next();
 });
+
+// Throttle the public, unauthenticated POST endpoints only. Scoped to POST so
+// CORS preflight (OPTIONS) is unaffected; the limiter calls next() and the
+// request then falls through to its mounted router below.
+app.post('/auth/signup', publicLimiter);
+app.post('/api/barcode/lookup', publicLimiter);
+app.post('/api/volunteer/verify', publicLimiter);
 
 app.use('/auth', authRoutes);
 app.use('/categories', categoriesRoutes);
