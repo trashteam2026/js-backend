@@ -7,9 +7,18 @@ dotenv.config();
 
 const { Pool } = pg;
 
+// Pool sizing for PgBouncer transaction-mode pooling on serverless: each
+// Cloud Functions instance keeps at most a handful of connections, since the
+// Supabase transaction pooler (port 6543) multiplexes many clients onto few
+// server connections. A small max avoids exhausting the pooler under fan-out;
+// the timeouts release idle connections quickly and fail fast instead of
+// hanging when the pooler is saturated.
 const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }, // required for Supabase
+  max: 3,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 10000,
 });
 
 // Export both names so older repositories that still import `pool`
