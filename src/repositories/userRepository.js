@@ -7,6 +7,7 @@ const userRepository = {
   findByUid: (uid) => provider.findByUid(uid),
   getAll: () => provider.getAll(),
   upsertUser: (userData) => provider.upsertUser(userData),
+  isOwnerEmail: (email) => provider.isOwnerEmail(email),
 };
 
 export default userRepository;
