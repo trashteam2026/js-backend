@@ -128,6 +128,20 @@ ALTER TABLE activity_log
 CREATE INDEX IF NOT EXISTS idx_activity_log_created_at
   ON activity_log (created_at DESC);
 
+-- Indexes folded from migrations/007. item_id and batch_id back their
+-- ON DELETE SET NULL FKs (avoids a full seq-scan on item/batch delete). The
+-- partial index serves the volunteer-history query (action='added' +
+-- created_at range, ordered by created_at DESC).
+CREATE INDEX IF NOT EXISTS idx_activity_log_item_id
+  ON activity_log (item_id);
+
+CREATE INDEX IF NOT EXISTS idx_activity_log_batch_id
+  ON activity_log (batch_id);
+
+CREATE INDEX IF NOT EXISTS idx_activity_log_added_created_at
+  ON activity_log (created_at DESC)
+  WHERE action = 'added';
+
 -- ─── volunteer_sessions ─────────────────────────────────────────────────────
 -- One live session per owner (keyed by owner_uid). Folded from migration 003.
 CREATE TABLE IF NOT EXISTS volunteer_sessions (
