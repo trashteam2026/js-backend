@@ -1,0 +1,55 @@
+name: Deploy Firebase Functions
+
+# Auto-deploy the `api` Cloud Function (gen2, nodejs22, us-central1) on every
+# push to main. Auth uses the FIREBASE_SERVICE_ACCOUNT secret (a GCP service
+# account JSON key) via Application Default Credentials — no FIREBASE_TOKEN.
+on:
+  push:
+    branches: [main]
+
+# JSON-key auth (not Workload Identity Federation), so no OIDC token is needed.
+permissions:
+  contents: read
+
+# Avoid overlapping deploys if commits land in quick succession.
+concurrency:
+  group: deploy-functions-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Writes the service account JSON to a temp file and exports
+      # GOOGLE_APPLICATION_CREDENTIALS for all subsequent steps. The Firebase
+      # CLI then authenticates via Application Default Credentials (ADC).
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Install Firebase CLI (pinned)
+        run: npm install -g firebase-tools@15.19.1
+
+      # CI=true (set by GitHub Actions) + --non-interactive guarantees no
+      # prompts. --force is intentionally omitted so any unexpected destructive
+      # change (e.g. a function deletion) fails the run instead of auto-applying.
+      - name: Deploy functions
+        run: >-
+          firebase deploy
+          --only functions
+          --project food-pantry-5fdb0
+          --non-interactive

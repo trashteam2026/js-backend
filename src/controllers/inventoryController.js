@@ -107,7 +107,7 @@ const inventoryController = {
             code: 'SESSION_ENDED',
           });
         }
-      } else if (!isOwner(req.user)) {
+      } else if (!(await isOwner(req.user))) {
         return res.status(403).json({
           error: 'Owner access required',
           code: 'NOT_OWNER',

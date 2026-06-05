@@ -1,4 +1,6 @@
 import admin from '../config/firebase.js';
+import { pgPool } from '../config/database.js';
+import userRepository from '../repositories/userRepository.js';
 
 const authMiddleware = async (req, res, next) => {
   try {
@@ -30,50 +32,50 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
-// Reads the OWNER_EMAILS allowlist from the environment at call time (no cached
-// array) and reports whether the given email is on it. Comma-separated,
-// case-insensitive, whitespace-trimmed.
-export const isOwnerEmail = (email) => {
+// Reports whether the given email is an owner by looking it up in the owners
+// table (see migration 006). Normalization (lower+trim) happens in the
+// repository/provider SQL so it stays symmetric with how rows were seeded.
+export async function isOwnerEmail(email) {
   if (!email) return false;
-  const allowlist = (process.env.OWNER_EMAILS || '')
-    .split(',')
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-  return allowlist.includes(email.trim().toLowerCase());
-};
+  return await userRepository.isOwnerEmail(email);
+}
 
 // Decides whether a verified token belongs to an owner.
-// - No user / anonymous volunteer  -> never an owner.
-// - OWNER_EMAILS empty/unset        -> OPEN MODE: any non-anonymous signed-in
-//   user is treated as an owner (development default; see startup warning).
-// - OWNER_EMAILS populated          -> owner only if the email is on the list.
-export const isOwner = (user) => {
+// - No user / anonymous volunteer -> never an owner.
+// - Otherwise                      -> owner only if the email is in the owners table.
+export async function isOwner(user) {
   if (!user) return false;
   if (user.firebase?.sign_in_provider === 'anonymous') return false;
-  const allowlistEmpty = !(process.env.OWNER_EMAILS || '').trim();
-  if (allowlistEmpty) return true;
-  return isOwnerEmail(user.email);
-};
+  return await isOwnerEmail(user.email);
+}
 
-// Logs a loud warning when the owner allowlist is empty so the open-mode default
-// can't silently ship to production. Call once at server startup.
-export const warnIfOwnerAllowlistEmpty = () => {
-  if (!(process.env.OWNER_EMAILS || '').trim()) {
-    console.warn(
-      '⚠️  OWNER_EMAILS is empty — owner-only routes are OPEN to any signed-in user. ' +
-        'Set OWNER_EMAILS before production.'
+// Logs a loud warning when the owners table is empty so a misconfigured deploy
+// (no owners seeded) doesn't silently lock everyone out of owner-only routes.
+// Call once at server startup. Never throws.
+export async function warnIfOwnerAllowlistEmpty() {
+  try {
+    const { rows } = await pgPool.query(
+      'SELECT COUNT(*)::int AS count FROM owners'
     );
+    if (!rows[0] || rows[0].count === 0) {
+      console.warn(
+        '⚠️  owners table is empty — no one will pass requireOwner. ' +
+          'Seed the owners table before production.'
+      );
+    }
+  } catch (error) {
+    console.error('Failed to check owners table on startup:', error);
   }
-};
+}
 
 // Requires the request to come from an owner (see isOwner). Use after
-// authMiddleware. Rejects anonymous volunteers and non-allowlisted users with 403.
-export const requireOwner = (req, res, next) => {
-  if (!isOwner(req.user)) {
+// authMiddleware. Rejects anonymous volunteers and non-owner users with 403.
+export async function requireOwner(req, res, next) {
+  if (!(await isOwner(req.user))) {
     return res.status(403).json({ error: 'Owner access required' });
   }
   next();
-};
+}
 
 // Authenticates if token present; continues without setting req.user if not.
 export const optionalAuth = async (req, _res, next) => {

@@ -40,5 +40,12 @@ export default {
   async getAll() {
     const { rows } = await pgPool.query(`SELECT username, email, firstname, lastname FROM users ORDER BY username ASC`);
     return rows;
+  },
+
+  async isOwnerEmail(email) {
+    if (!email) return false;
+    const sql = `SELECT 1 FROM owners WHERE email = LOWER(TRIM($1)) LIMIT 1`;
+    const { rows } = await pgPool.query(sql, [email]);
+    return rows.length > 0;
   }
 };

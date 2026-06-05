@@ -73,7 +73,7 @@ const authController = {
 
       const user = await userRepository.findByUid(decodedToken.uid);
 
-      const owner = isOwner(decodedToken);
+      const owner = await isOwner(decodedToken);
 
       return res.json({
         ...(user || {
