@@ -200,3 +200,22 @@ WHERE NOT EXISTS (
   FROM categories c
   WHERE LOWER(c.name) = LOWER(seed.name)
 );
+
+-- ─── owners ─────────────────────────────────────────────────────────────────
+-- Owner authorization allowlist (queryable instead of the OWNER_EMAILS env).
+-- Emails stored lower+trimmed to match authMiddleware's normalized compare.
+-- Folded from migration 006.
+CREATE TABLE IF NOT EXISTS owners (
+  id SERIAL PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO owners (email)
+VALUES
+  (LOWER(TRIM('ohjinwoo0608@gmail.com'))),
+  (LOWER(TRIM('Albert0515kim@gmail.com'))),
+  (LOWER(TRIM('cameronlam2028@u.northwestern.edu'))),
+  (LOWER(TRIM('fayma2029@u.northwestern.edu'))),
+  (LOWER(TRIM('trashteam2026@gmail.com')))
+ON CONFLICT (email) DO NOTHING;
